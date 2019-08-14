@@ -7,7 +7,9 @@ Homework from **RUST class** 8/8/2019
 - GET list?query="string"
 - POST data=string
 - DELETE by query="string"
-  **Bonus**
+
+**Bonus**
+
 - use json
 - save list in file
 
@@ -18,6 +20,7 @@ cargo run
 ```
 
 example query:
+
 _GET_
 
 ```
