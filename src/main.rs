@@ -9,8 +9,12 @@ use rocket_contrib::json::Json;
 use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};
 use std::io::prelude::*;
-use std::io::{BufReader, Error, SeekFrom};
+use std::io::{BufReader, SeekFrom};
 use std::sync::Mutex;
+
+use crate::error::{ApiError, ApiResponse};
+
+mod error;
 
 const TODO_FILE: &'static str = "foo.json";
 
@@ -41,15 +45,15 @@ fn index() -> &'static str {
 }
 
 #[get("/api/list?<query>")]
-fn return_list(query: Option<&RawStr>, new_state: State<NewAppState>) -> String {
+fn return_list(query: Option<&RawStr>, new_state: State<NewAppState>) -> ApiResponse<String> {
     let file_handle = new_state.todo_file.lock().unwrap();
     let mut buf_reader = BufReader::new(&*file_handle);
 
-    let data: TodoFile = read_data_to_json(&mut buf_reader).unwrap();
+    let data: TodoFile = read_data_to_json(&mut buf_reader)?;
     match &query {
         None => {
             let string_json = data.to_json_string().unwrap();
-            format!("{}", &string_json)
+            Ok(format!("{}", &string_json))
         }
         Some(query) => {
             let query = query.to_string();
@@ -59,43 +63,42 @@ fn return_list(query: Option<&RawStr>, new_state: State<NewAppState>) -> String 
                 .filter(|todo| query == todo.title)
                 .nth(0)
             {
-                Some(todo) => format!("{:?}\n", todo),
-                None => format!("No todo with such title found.\n"),
+                None => Err(ApiError::NotFound),
+                Some(todo) => Ok(format!("{:?}\n", todo)),
             }
         }
     }
 }
 
 #[post("/api/post", format = "application/json", data = "<todo>")]
-fn post_data(todo: Json<Todo>, new_state: State<NewAppState>) -> String {
-    let todo = todo.into_inner();
-    let Todo { title, content } = todo;
+fn post_data(todo: Json<Todo>, new_state: State<NewAppState>) -> ApiResponse<String> {
+    let Todo { title, content } = todo.into_inner();
 
     let mut file_handle = new_state.todo_file.lock().unwrap();
-    let mut data = read_data_to_json(&mut *file_handle).unwrap();
+    let mut data = read_data_to_json(&mut *file_handle)?;
     // Check if title already exist to prevent duplicate
 
     if let Some(_) = &data.todo_list.iter().find(|todo| title == todo.title) {
-        return format!("title already exist. Can't save the item.\n");
+        return Err(ApiError::AlreadyExists);
     };
 
-    let new_todo = Todo {
+    data.todo_list.push(Todo {
         title: title.clone(),
         content: content.clone(),
-    };
-    data.todo_list.push(new_todo);
+    });
 
     let string_json = data.to_json_string().unwrap();
     println!("isi baru: {}", &string_json);
-    let mut new_handler = File::create(TODO_FILE).unwrap();
-    match new_handler.write(string_json.as_bytes()).unwrap() {
-        0 => format!("Error saving"),
-        _ => format!("Success saving\n"),
+
+    let mut new_handler = File::create(TODO_FILE)?;
+    match new_handler.write(string_json.as_bytes())? {
+        0 => Err(ApiError::FailedSaving),
+        _ => Ok(format!("Success saving\n")),
     }
 }
 
 #[delete("/api/delete?<query>")]
-fn delete_item(query: String, new_state: State<NewAppState>) -> String {
+fn delete_item(query: String, new_state: State<NewAppState>) -> ApiResponse<String> {
     let mut file_handle = new_state.todo_file.lock().unwrap();
     let mut data: TodoFile = read_data_to_json(&mut *file_handle).unwrap();
 
@@ -107,14 +110,14 @@ fn delete_item(query: String, new_state: State<NewAppState>) -> String {
     let updated_list = TodoFile { todo_list: new_vec };
     let string_json = updated_list.to_json_string().unwrap();
 
-    let mut new_handler = File::create(TODO_FILE).unwrap();
-    match new_handler.write(string_json.as_bytes()).unwrap() {
-        0 => format!("Error.\n"),
-        _ => format!("Success deleting.\n"),
+    let mut new_handler = File::create(TODO_FILE)?;
+    match new_handler.write(string_json.as_bytes())? {
+        0 => Err(ApiError::FailedSaving),
+        _ => Ok(format!("Success saving\n")),
     }
 }
 
-fn read_data_to_json<T>(file: &mut T) -> Result<TodoFile, Error>
+fn read_data_to_json<T>(file: &mut T) -> Result<TodoFile, std::io::Error>
 where
     T: Seek + Read,
 {
