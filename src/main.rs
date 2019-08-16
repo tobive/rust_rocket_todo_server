@@ -25,6 +25,12 @@ struct TodoFile {
     todo_list: Vec<Todo>,
 }
 
+impl TodoFile {
+    fn to_json_string(&self) -> Result<String, serde::errors::Error> {
+        serde_json::to_string(self)
+    }
+}
+
 struct NewAppState {
     todo_file: Mutex<File>,
 }
@@ -42,7 +48,7 @@ fn return_list(query: Option<&RawStr>, new_state: State<NewAppState>) -> String 
     let data: TodoFile = read_data_to_json(&mut buf_reader).unwrap();
     match &query {
         None => {
-            let string_json = serde_json::to_string(&data).unwrap();
+            let string_json = data.to_json_string().unwrap();
             format!("{}", &string_json)
         }
         Some(query) => {
@@ -74,7 +80,7 @@ fn post_data(todo: Json<Todo>, new_state: State<NewAppState>) -> String {
     };
     data.todo_list.push(new_todo);
 
-    let string_json = serde_json::to_string(&data).unwrap();
+    let string_json = data.to_json_string().unwrap();
     println!("isi baru: {}", &string_json);
     let mut new_handler = File::create(TODO_FILE).unwrap();
     match new_handler.write(string_json.as_bytes()).unwrap() {
@@ -93,7 +99,7 @@ fn delete_item(query: String, new_state: State<NewAppState>) -> String {
     let updated_list = TodoFile {
         todo_list: new_vec,
     };
-    let string_json = serde_json::to_string(&updated_list).unwrap();
+    let string_json = updated_list.to_json_string().unwrap();
 
     let mut new_handler = File::create(TODO_FILE).unwrap();
     match new_handler.write(string_json.as_bytes()).unwrap() {
