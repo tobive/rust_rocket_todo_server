@@ -26,7 +26,7 @@ struct TodoFile {
 }
 
 impl TodoFile {
-    fn to_json_string(&self) -> Result<String, serde::errors::Error> {
+    fn to_json_string(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string(self)
     }
 }
@@ -53,7 +53,12 @@ fn return_list(query: Option<&RawStr>, new_state: State<NewAppState>) -> String 
         }
         Some(query) => {
             let query = query.to_string();
-            match &data.todo_list.iter().filter(|todo| query == todo.title).nth(0) {
+            match &data
+                .todo_list
+                .iter()
+                .filter(|todo| query == todo.title)
+                .nth(0)
+            {
                 Some(todo) => format!("{:?}\n", todo),
                 None => format!("No todo with such title found.\n"),
             }
@@ -64,7 +69,7 @@ fn return_list(query: Option<&RawStr>, new_state: State<NewAppState>) -> String 
 #[post("/api/post", format = "application/json", data = "<todo>")]
 fn post_data(todo: Json<Todo>, new_state: State<NewAppState>) -> String {
     let todo = todo.into_inner();
-    let Todo {title, content} = todo;
+    let Todo { title, content } = todo;
 
     let mut file_handle = new_state.todo_file.lock().unwrap();
     let mut data = read_data_to_json(&mut *file_handle).unwrap();
@@ -94,11 +99,12 @@ fn delete_item(query: String, new_state: State<NewAppState>) -> String {
     let mut file_handle = new_state.todo_file.lock().unwrap();
     let mut data: TodoFile = read_data_to_json(&mut *file_handle).unwrap();
 
-    let new_vec: Vec<Todo> = data.todo_list.drain_filter(|todo| todo.title == query).collect();
+    let new_vec: Vec<Todo> = data
+        .todo_list
+        .drain_filter(|todo| todo.title == query)
+        .collect();
 
-    let updated_list = TodoFile {
-        todo_list: new_vec,
-    };
+    let updated_list = TodoFile { todo_list: new_vec };
     let string_json = updated_list.to_json_string().unwrap();
 
     let mut new_handler = File::create(TODO_FILE).unwrap();
@@ -115,7 +121,7 @@ where
     let mut contents = String::new();
     file.seek(SeekFrom::Start(0))?; // -> reset position to the start of file
     file.read_to_string(&mut contents)?;
-    let data= serde_json::from_str(&contents)?;
+    let data = serde_json::from_str(&contents)?;
     Ok(data)
 }
 
